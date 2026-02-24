@@ -10,36 +10,4 @@
 
 <img width="1425" height="897" alt="{812C1F4A-A1CC-42E0-B9BF-D798BEC44588}" src="https://github.com/user-attachments/assets/9258605e-1d29-4ed2-9655-9d0435fbe5ac" />
 
-## Практическая работа: Swagger API Documentation
 
-### Цель работы
-Подключить к существующему веб-приложению интерактивную документацию API с использованием swagger-jsdoc и swagger-ui-express.
-
-### Выполненные задачи
-
-1. **Установлены npm-пакеты:**
-   - swagger-jsdoc
-   - swagger-ui-express
-
-2. **Настроена Swagger документация в server/index.js:**
-   - Подключены модули swagger-jsdoc и swagger-ui-express
-   - Настроена конфигурация OpenAPI 3.0.0
-   - Добавлена схема Product с полями: id, name, category, description, price, stock, rating, image
-
-3. **Документированы все CRUD-операции:**
-   - GET /api/products - получение всех товаров
-   - GET /api/products/:id - получение товара по ID
-   - POST /api/products - создание нового товара
-   - PUT /api/products/:id - обновление товара
-   - DELETE /api/products/:id - удаление товара
-   - GET /api/categories - получение списка категорий
-
-### Запуск приложения
-
-1. Установить зависимости: `npm install`
-2. Запустить сервер: `node server/index.js`
-3. Открыть Swagger UI: http://localhost:3001/api-docs
-4. Тестировать запросы можно прямо в браузере через интерфейс Swagger
-
-### Тестирование
-Документация доступна по адресу /api-docs. Все запросы можно протестировать в интерактивном режиме, нажав кнопку "Try it out" на любом эндпоинте.
