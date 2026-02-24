@@ -14,4 +14,15 @@
 
 <img width="1425" height="897" alt="{812C1F4A-A1CC-42E0-B9BF-D798BEC44588}" src="https://github.com/user-attachments/assets/9258605e-1d29-4ed2-9655-9d0435fbe5ac" />
 
+Работа api
+<img width="1918" height="650" alt="{2E60C96B-4E2D-45EC-9BAE-A5BD3CA18E19}" src="https://github.com/user-attachments/assets/f84ab4d7-c46e-4399-b929-dd8665cecb7b" />
+
+Добавление товара 
+<img width="1211" height="775" alt="{F4D68FE0-6E0F-4CD5-AAE1-C4F15ADFE57A}" src="https://github.com/user-attachments/assets/ec9ad1ea-c2e3-45af-b226-0a011ee4b6e7" />
+
+ДОбавленный товар
+<img width="867" height="46" alt="{98FA055D-DA83-4AED-A61B-2FA4B613AE75}" src="https://github.com/user-attachments/assets/04cb95a9-d94c-4bc1-8893-59b370db5704" />
+<img width="1902" height="961" alt="{EE304FFF-EA84-4AD5-A3AE-E522CBB5160F}" src="https://github.com/user-attachments/assets/4b93ac19-f1ca-4b17-962e-21dc441c2246" />
+
+
 
