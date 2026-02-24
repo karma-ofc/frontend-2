@@ -17,7 +17,7 @@
 Работа api
 <img width="1918" height="650" alt="{2E60C96B-4E2D-45EC-9BAE-A5BD3CA18E19}" src="https://github.com/user-attachments/assets/f84ab4d7-c46e-4399-b929-dd8665cecb7b" />
 
-Добавление товара 
+Добавление товара (Проверка)
 <img width="1211" height="775" alt="{F4D68FE0-6E0F-4CD5-AAE1-C4F15ADFE57A}" src="https://github.com/user-attachments/assets/ec9ad1ea-c2e3-45af-b226-0a011ee4b6e7" />
 
 ДОбавленный товар
