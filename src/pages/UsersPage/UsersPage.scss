@@ -1,4 +1,4 @@
-// Стили SCSS магазина
+﻿// Стили SCSS магазина
 $bg: #0b0f19;
 $panel: rgba(255, 255, 255, 0.03);
 $border: rgba(255, 255, 255, 0.10);
@@ -391,4 +391,100 @@ $successBg: rgba(34, 197, 94, 0.12);
   &:focus {
     border-color: $primary;
   }
+}
+
+// Стили аутентификации
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+}
+
+.auth-card {
+  @include card();
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+
+  h2 {
+    text-align: center;
+    margin-bottom: 24px;
+    font-size: 24px;
+    font-weight: 600;
+  }
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    input {
+      padding: 12px 16px;
+      border: 1px solid $border;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: $text;
+      font-size: 14px;
+
+      &::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      &:focus {
+        outline: none;
+        border-color: $primary;
+      }
+    }
+
+    button[type='submit'] {
+      padding: 12px 16px;
+      background: $primary;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+
+      &:hover:not(:disabled) {
+        background: rgba(99, 102, 241, 0.7);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  .error {
+    color: #ef4444;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  .switch-auth {
+    margin-top: 16px;
+    padding: 8px;
+    background: none;
+    border: none;
+    color: $primary;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: underline;
+    width: 100%;
+
+    &:hover {
+      color: rgba(99, 102, 241, 0.8);
+    }
+  }
+}
+
+// Информация о пользователе в хедере
+.user-info {
+  margin-right: 12px;
+  font-size: 13px;
+  opacity: 0.85;
 }

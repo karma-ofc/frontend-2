@@ -7,6 +7,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = 'supersecretkey'; // В реальном проекте хранить в .env
+const REFRESH_SECRET = 'refreshsupersecretkey'; // Отдельный секрет для refresh токенов
+
+let refreshTokens = []; // В памяти для демо, в проде - Redis или БД
 
 // Подключаем Swagger
 const swaggerJsdoc = require('swagger-jsdoc');
@@ -327,10 +330,16 @@ app.post('/api/auth/login', async (req, res) => {
   if (!isMatch) {
     return res.status(401).json({ error: 'Неверный email или пароль' });
   }
-  // Генерируем токен
-  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+  // Генерируем токены
+  const accessToken = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '15m' });
+  const refreshToken = jwt.sign({ id: user.id, email: user.email }, REFRESH_SECRET, { expiresIn: '7d' });
+  
+  // Сохраняем refresh token
+  refreshTokens.push(refreshToken);
+  
   res.json({
-    token,
+    accessToken,
+    refreshToken,
     user: { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name }
   });
 });
@@ -340,6 +349,32 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name });
+});
+
+// Маршрут для обновления access token
+app.post('/api/auth/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token required' });
+  }
+  
+  if (!refreshTokens.includes(refreshToken)) {
+    return res.status(403).json({ error: 'Invalid refresh token' });
+  }
+  
+  jwt.verify(refreshToken, REFRESH_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid refresh token' });
+    
+    const accessToken = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '15m' });
+    res.json({ accessToken });
+  });
+});
+
+// Маршрут для выхода (удаление refresh token)
+app.post('/api/auth/logout', (req, res) => {
+  const { refreshToken } = req.body;
+  refreshTokens = refreshTokens.filter(token => token !== refreshToken);
+  res.json({ message: 'Logged out' });
 });
 
 app.get('/api', (req, res) => {
@@ -371,7 +406,7 @@ app.get('/api', (req, res) => {
  *               items:
  *                 $ref: '#/components/schemas/Product'
  */
-app.get('/api/products', (req, res) => {
+app.get('/api/products', authMiddleware, (req, res) => {
   res.json(products);
 });
 
@@ -415,7 +450,7 @@ app.get('/api/products', (req, res) => {
 /Product'
  * *         description: Ошибка в теле запроса
  */
-app.post('/api/products', (req, res) => {
+app.post('/api/products', authMiddleware, (req, res) => {
   const { name, category, description, price, stock, rating, image } = req.body;
   
   if (!name || !category) {

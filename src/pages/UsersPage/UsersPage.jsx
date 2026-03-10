@@ -40,10 +40,26 @@ export default function StorePage() {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Все категории");
+  
+  // Аутентификация
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('accessToken'));
+  const [authMode, setAuthMode] = useState('login'); // 'login' или 'register'
+  const [authForm, setAuthForm] = useState({
+    email: '',
+    password: '',
+    first_name: '',
+    last_name: ''
+  });
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     loadProducts();
-  }, []);
+    if (isAuthenticated) {
+      loadCurrentUser();
+    }
+  }, [isAuthenticated]);
 
   const loadProducts = async () => {
     try {
@@ -63,6 +79,50 @@ export default function StorePage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadCurrentUser = async () => {
+    try {
+      const userData = await api.getCurrentUser();
+      setCurrentUser(userData);
+    } catch (err) {
+      console.log('Failed to load user info:', err);
+      // Если не удалось получить информацию о пользователе, возможно токен истек
+      handleLogout();
+    }
+  };
+
+  // Функции аутентификации
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError('');
+    
+    try {
+      if (authMode === 'login') {
+        await api.login(authForm.email, authForm.password);
+      } else {
+        await api.register({
+          email: authForm.email,
+          password: authForm.password,
+          first_name: authForm.first_name,
+          last_name: authForm.last_name
+        });
+      }
+      setIsAuthenticated(true);
+      setAuthForm({ email: '', password: '', first_name: '', last_name: '' });
+      await loadCurrentUser(); // Загружаем информацию о пользователе
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
   };
 
   const nextId = useMemo(() => {
@@ -210,12 +270,85 @@ export default function StorePage() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className="page">
+        <header className="header">
+          <div className="header__inner">
+            <div className="brand">Магазин одежды и обуви</div>
+            <div className="header__right">React</div>
+          </div>
+        </header>
+        <main className="main">
+          <div className="container">
+            <div className="auth-container">
+              <div className="auth-card">
+                <h2>{authMode === 'login' ? 'Вход' : 'Регистрация'}</h2>
+                <form onSubmit={handleAuthSubmit}>
+                  {authMode === 'register' && (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Имя"
+                        value={authForm.first_name}
+                        onChange={(e) => setAuthForm({...authForm, first_name: e.target.value})}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Фамилия"
+                        value={authForm.last_name}
+                        onChange={(e) => setAuthForm({...authForm, last_name: e.target.value})}
+                        required
+                      />
+                    </>
+                  )}
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={authForm.email}
+                    onChange={(e) => setAuthForm({...authForm, email: e.target.value})}
+                    required
+                  />
+                  <input
+                    type="password"
+                    placeholder="Пароль"
+                    value={authForm.password}
+                    onChange={(e) => setAuthForm({...authForm, password: e.target.value})}
+                    required
+                  />
+                  {authError && <div className="error">{authError}</div>}
+                  <button type="submit" disabled={authLoading}>
+                    {authLoading ? 'Загрузка...' : (authMode === 'login' ? 'Войти' : 'Зарегистрироваться')}
+                  </button>
+                </form>
+                <button 
+                  className="switch-auth"
+                  onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                >
+                  {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <header className="header">
         <div className="header__inner">
           <div className="brand">Магазин одежды и обуви</div>
-          <div className="header__right">React</div>
+          <div className="header__right">
+            {currentUser && (
+              <span className="user-info">
+                Привет, {currentUser.first_name} {currentUser.last_name}
+              </span>
+            )}
+            <button className="btn btn--secondary" onClick={handleLogout}>Выйти</button>
+          </div>
         </div>
       </header>
       
