@@ -1,4 +1,4 @@
-<img width="1920" height="729" alt="image" src="https://github.com/user-attachments/assets/aeac0f31-a90b-482c-97f8-8ee39f0b86f7" />Практика 9-10
+>Практика 9-10
 Регистрация
 <img width="1211" height="630" alt="{C4BB58BD-BBCB-47EB-9429-5155D3FF8CC1}" src="https://github.com/user-attachments/assets/3bd0846b-c3dc-4104-b3b6-666a14606f2f" />
 <img width="1177" height="693" alt="{97362514-6553-4334-BBC9-0A6F01A3CBE3}" src="https://github.com/user-attachments/assets/2572a2ad-3e77-4c3c-9968-8ed55b22a05e" />
