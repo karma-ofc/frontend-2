@@ -5,9 +5,113 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { createClient } = require('redis');
 
 const JWT_SECRET = 'supersecretkey';         // В реальном проекте хранить в .env
 const JWT_REFRESH_SECRET = 'superrefreshkey'; // В реальном проекте хранить в .env
+const USERS_CACHE_TTL = 60;
+const PRODUCTS_CACHE_TTL = 600;
+
+const redisClient = createClient({
+  url: 'redis://127.0.0.1:6379',
+  socket: {
+    reconnectStrategy: () => false,
+  },
+});
+
+redisClient.on('error', (error) => {
+  console.error('Redis error:', error);
+});
+
+let redisReady = false;
+
+async function initRedis() {
+  if (redisReady) {
+    return;
+  }
+
+  try {
+    await redisClient.connect();
+    redisReady = true;
+    console.log('Redis connected');
+  } catch (error) {
+    console.warn('Redis connection failed, cache is disabled:', error.message);
+  }
+}
+
+async function getCachedValue(key) {
+  if (!redisReady) {
+    return null;
+  }
+
+  try {
+    return await redisClient.get(key);
+  } catch (error) {
+    console.error('Cache read error:', error);
+    return null;
+  }
+}
+
+async function saveToCache(key, data, ttl) {
+  if (!redisReady) {
+    return;
+  }
+
+  try {
+    await redisClient.set(key, JSON.stringify(data), {
+      EX: ttl,
+    });
+  } catch (error) {
+    console.error('Cache save error:', error);
+  }
+}
+
+async function deleteKeysByPattern(pattern) {
+  if (!redisReady) {
+    return;
+  }
+
+  try {
+    const keys = await redisClient.keys(pattern);
+    
+    if (keys && Array.isArray(keys) && keys.length > 0) {
+      await redisClient.del(...keys);
+    }
+  } catch (error) {
+    console.error('Cache invalidate error:', error);
+  }
+}
+
+function cacheMiddleware(keyBuilder, ttl) {
+  return async (req, res, next) => {
+    try {
+      const key = keyBuilder(req);
+      const cachedValue = await getCachedValue(key);
+
+      if (cachedValue !== null) {
+        res.set('X-Cache', 'HIT');
+
+        try {
+          const data = JSON.parse(cachedValue);
+          return res.json({
+            source: 'cache',
+            data: data
+          });
+        } catch (error) {
+          console.error('Cache parse error:', error);
+        }
+      }
+
+      req.cacheKey = key;
+      req.cacheTTL = ttl;
+      res.set('X-Cache', 'MISS');
+      next();
+    } catch (error) {
+      console.error('Cache middleware error:', error);
+      next();
+    }
+  };
+}
 
 // Хранилище действующих refresh-токенов (в реальном проекте — БД / Redis)
 const refreshTokensStore = new Set();
@@ -37,6 +141,18 @@ const swaggerOptions = {
         description: 'Локальный сервер',
       },
     ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        }
+      }
+    },
+    security: [{
+      bearerAuth: []
+    }],
   },
   apis: ['./server/index.js'],
 };
@@ -148,17 +264,17 @@ const categories = [
  *           description: URL изображения товара
  *       example:
  *         id: 1
- *         name: "Ноутбук ASUS VivoBook 15"
- *         category: "Ноутбуки"
- *         description: "15.6 дюймов, Intel Core i5, 8GB RAM, 512GB SSD"
- *         price: 54990
+ *         name: "Куртка зимняя мужская"
+ *         category: "Верхняя одежда"
+ *         description: "Утепленная, водонепроницаемая, размеры M-XXL"
+ *         price: 12990
  *         stock: 15
  *         rating: 4.5
- *         image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=200&h=200&fit=crop"
+ *         image: "https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=200&h=200&fit=crop"
  *     Category:
  *       type: string
  *       description: Название категории
- *       example: "Ноутбуки"
+ *       example: "Верхняя одежда"
  *     TokenPair:
  *       type: object
  *       properties:
@@ -238,6 +354,7 @@ app.post('/api/auth/register', async (req, res) => {
     role: users.length === 0 ? 'Admin' : 'User' // Первый пользователь — Администратор
   };
   users.push(newUser);
+  await deleteKeysByPattern('users:*');
   res.status(201).json({ id: newUser.id, email: newUser.email, first_name: newUser.first_name, last_name: newUser.last_name });
 });
 
@@ -368,18 +485,27 @@ app.get('/api', (req, res) => {
 });
 
 // ==================== USERS API (Admin) ====================
-app.get('/api/users', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, res) => {
+app.get('/api/users', authMiddleware, roleMiddleware([ROLES.ADMIN]), cacheMiddleware(() => 'users:all', USERS_CACHE_TTL), async (req, res) => {
   const safeUsers = users.map(u => ({ id: u.id, email: u.email, first_name: u.first_name, last_name: u.last_name, role: u.role }));
-  res.json(safeUsers);
+  await saveToCache(req.cacheKey, safeUsers, req.cacheTTL);
+  res.json({
+    source: 'server',
+    data: safeUsers
+  });
 });
 
-app.get('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, res) => {
+app.get('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), cacheMiddleware((req) => `users:${req.params.id}`, USERS_CACHE_TTL), async (req, res) => {
   const user = users.find(u => u.id === parseInt(req.params.id));
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-  res.json({ id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role });
+  const safeUser = { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name, role: user.role };
+  await saveToCache(req.cacheKey, safeUser, req.cacheTTL);
+  res.json({
+    source: 'server',
+    data: safeUser
+  });
 });
 
-app.put('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, res) => {
+app.put('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), async (req, res) => {
   const id = parseInt(req.params.id);
   const index = users.findIndex(u => u.id === id);
   if (index === -1) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -387,14 +513,16 @@ app.put('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, r
   if (role && [ROLES.USER, ROLES.SELLER, ROLES.ADMIN].includes(role)) {
     users[index].role = role;
   }
+  await deleteKeysByPattern('users:*');
   res.json({ id: users[index].id, email: users[index].email, first_name: users[index].first_name, last_name: users[index].last_name, role: users[index].role });
 });
 
-app.delete('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, res) => {
+app.delete('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), async (req, res) => {
   const id = parseInt(req.params.id);
   const index = users.findIndex(u => u.id === id);
   if (index === -1) return res.status(404).json({ error: 'Пользователь не найден' });
   users = users.filter(u => u.id !== id);
+  await deleteKeysByPattern('users:*');
   res.json({ success: true });
 });
 
@@ -416,8 +544,12 @@ app.delete('/api/users/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req
  *               items:
  *                 $ref: '#/components/schemas/Product'
  */
-app.get('/api/products', authMiddleware, roleMiddleware([ROLES.USER, ROLES.SELLER, ROLES.ADMIN]), (req, res) => {
-  res.json(products);
+app.get('/api/products', authMiddleware, roleMiddleware([ROLES.USER, ROLES.SELLER, ROLES.ADMIN]), cacheMiddleware(() => 'products:all', PRODUCTS_CACHE_TTL), async (req, res) => {
+  await saveToCache(req.cacheKey, products, req.cacheTTL);
+  res.json({
+    source: 'server',
+    data: products
+  });
 });
 
 /**
@@ -460,7 +592,7 @@ app.get('/api/products', authMiddleware, roleMiddleware([ROLES.USER, ROLES.SELLE
  *       400:
  *         description: Ошибка в теле запроса
  */
-app.post('/api/products', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.ADMIN]), (req, res) => {
+app.post('/api/products', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.ADMIN]), async (req, res) => {
   const { name, category, description, price, stock, rating, image } = req.body;
   
   if (!name || !category) {
@@ -479,6 +611,7 @@ app.post('/api/products', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.AD
   };
   
   products.push(newProduct);
+  await deleteKeysByPattern('products:*');
   res.status(201).json(newProduct);
 });
 
@@ -506,12 +639,16 @@ app.post('/api/products', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.AD
  *         description: Товар не найден
  */
 // Защищённый маршрут
-app.get('/api/products/:id', authMiddleware, roleMiddleware([ROLES.USER, ROLES.SELLER, ROLES.ADMIN]), (req, res) => {
+app.get('/api/products/:id', authMiddleware, roleMiddleware([ROLES.USER, ROLES.SELLER, ROLES.ADMIN]), cacheMiddleware((req) => `products:${req.params.id}`, PRODUCTS_CACHE_TTL), async (req, res) => {
   const product = products.find(p => p.id === parseInt(req.params.id));
   if (!product) {
     return res.status(404).json({ error: 'Product not found' });
   }
-  res.json(product);
+  await saveToCache(req.cacheKey, product, req.cacheTTL);
+  res.json({
+    source: 'server',
+    data: product
+  });
 });
 
 /**
@@ -558,7 +695,7 @@ app.get('/api/products/:id', authMiddleware, roleMiddleware([ROLES.USER, ROLES.S
  *       404:
  *         description: Товар не найден
  */
-app.put('/api/products/:id', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.ADMIN]), (req, res) => {
+app.put('/api/products/:id', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES.ADMIN]), async (req, res) => {
   const id = parseInt(req.params.id);
   const index = products.findIndex(p => p.id === id);
   if (index === -1) {
@@ -575,6 +712,7 @@ app.put('/api/products/:id', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES
     rating: rating !== undefined ? rating : products[index].rating,
     image: image !== undefined ? image : products[index].image
   };
+  await deleteKeysByPattern('products:*');
   res.json(products[index]);
 });
 
@@ -597,13 +735,14 @@ app.put('/api/products/:id', authMiddleware, roleMiddleware([ROLES.SELLER, ROLES
  *       404:
  *         description: Товар не найден
  */
-app.delete('/api/products/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), (req, res) => {
+app.delete('/api/products/:id', authMiddleware, roleMiddleware([ROLES.ADMIN]), async (req, res) => {
   const id = parseInt(req.params.id);
   const index = products.findIndex(p => p.id === id);
   if (index === -1) {
     return res.status(404).json({ error: 'Product not found' });
   }
   products = products.filter(p => p.id !== id);
+  await deleteKeysByPattern('products:*');
   res.json({ success: true });
 });
 
@@ -650,8 +789,17 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`API available at http://localhost:${PORT}/api`);
-  console.log(`Swagger UI available at http://localhost:${PORT}/api-docs`);
+async function startServer() {
+  await initRedis();
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`API available at http://localhost:${PORT}/api`);
+    console.log(`Swagger UI available at http://localhost:${PORT}/api-docs`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
